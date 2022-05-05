@@ -31,8 +31,9 @@ void init_ports(){
 void init_irq(){
     INTCONbits.TMR0IE = 1;
     INTCONbits.GIE = 1;
+    T0CON |= 0x80; // Set TMR0ON
 }
-void tmr_preload(int level){
+void tmr_preload(){
     TMR0 = 60;    //only tick counter will be changed for different levels
 }
 void tmr(){
@@ -57,8 +58,8 @@ void tmr_isr(){
     if(--tick_counter == 0){
         timer_done = 1; //delay achived
     }
-    else{
-        tmr_preload(level);
+    else{   
+        tmr_preload();
     }
 }
 void main(void) {
