@@ -12,6 +12,8 @@ int level;
 int tick_counter; //counter at 100 gives 500ms, 80 gives 400ms, 60 gives 300ms
 int timer_done = 0;
 int trial = 0;
+unsigned char _7seg[4];
+int i=0;
 void tmr_isr();
 
 void __interrupt(high_priority) highPriorityISR(void) {
@@ -61,6 +63,42 @@ void tmr_isr(){
     else{   
         tmr_preload();
     }
+}
+unsigned char sendSevenSegment(unsigned char x)
+{
+    switch(x)
+    {
+        case 0: return 0b00111111;  // number 0
+        case 1: return 0b00000110;  // number 1
+        case 2: return 0b01011011;  // number 2
+        case 3: return 0b01001111;  // number 3
+        case 4: return 0b01100110;  // number 4
+        case 5: return 0b01101101;  // number 5
+        case 6: return 0b01111101;  // number 6
+        case 7: return 0b00000111;  // number 7
+        case 8: return 0b01111111;  // number 8
+        case 9: return 0b01101111;  // number 9
+        case '-': return 1<<6;      // dash (J6-g)
+    }
+    return 0;   
+}
+void sevenSegmentUpdate(){
+    int digit=1;
+    for(i=0;i<4;i++){ 
+
+        PORTH |= digit&0b00001111; //select only D0 by using PORTH
+        PORTJ=sendSevenSegment(_7seg[3-i]); //write the byte necessary to turn on segments to PORTJ
+        //wait for a while , ne kadar bekleyecegimizi belirtmemis ??
+        PORTH &= 0b11110000; //clear
+        digit<<=1; // do the same for D1, D2 and D3
+
+
+    }
+}
+void clearSevenSegment(){
+
+    for(i=0;i<4;i++)
+        _7seg[i]='-';//set all segments to dash
 }
 void main(void) {
     init_ports();
