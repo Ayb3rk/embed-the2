@@ -8,13 +8,18 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
-int level;
-int tick_counter; //counter at 100 gives 500ms, 80 gives 400ms, 60 gives 300ms
-int timer_done = 0;
-int trial = 0;
+uint8_t level;
+uint8_t tick_counter; //counter at 100 gives 500ms, 80 gives 400ms, 60 gives 300ms
+uint8_t timer_done = 0;
+uint8_t trial = 0;
+uint8_t inp_port_btn_st = 0;
+uint8_t game_start_flag = 0;
 unsigned char _7seg[4];
-int i=0;
+uint8_t i=0;
 void tmr_isr();
+typedef enum {TMR_IDLE, TMR_RUN, TMR_DONE} tmr_state_t;
+tmr_state_t tmr_state = TMR_IDLE;   // Current timer state
+uint8_t tmr_startreq = 0;           // Flag to request the timer to start
 
 void __interrupt(high_priority) highPriorityISR(void) {
     if (INTCONbits.TMR0IF) tmr_isr();
@@ -23,17 +28,28 @@ void __interrupt(low_priority) lowPriorityISR(void) {}
 
 void init_ports(){
     level = 1; //initial level is 1
-    TRISA = 0xE0; //game leds are initialized
-    TRISB = 0xE0; //led 0 to led 4 used for note visualization
-    TRISC = 0xE0;
-    TRISD = 0xE0;
-    TRISE = 0xE0;
-    TRISF = 0xE0;
+    TRISA = 0xe0; //led 0 to led 4 used for note visualization
+    TRISB = 0xe0; //led 0 to led 4 used for note visualization
+    TRISC = 0x01; //RC0 will be game starter port, thus we will set it as input in the beginning
+    TRISD = 0xe0; //led 0 to led 4 used for note visualization
+    TRISE = 0xe0; //led 0 to led 4 used for note visualization
+    TRISF = 0xe0; //led 0 to led 4 used for note visualization
+    TRISG = 0x1f; //PORTG 0-4 is input for matching notes
 }
 void init_irq(){
     INTCONbits.TMR0IE = 1;
     INTCONbits.GIE = 1;
-    T0CON |= 0x80; // Set TMR0ON
+}
+void tmr_start(uint8_t ticks) {
+    tick_counter = ticks; //set the desired number of ticks
+    tmr_startreq = 1; //set the start request
+    tmr_state = TMR_IDLE; //go to idle state
+}
+// This function aborts the current timer run and goes back to IDLE
+void tmr_abort() {
+    T0CON &= 0x7f; // Unset TMR0ON
+    tmr_startreq = 0;
+    tmr_state = TMR_IDLE;
 }
 void tmr_preload(){
     TMR0 = 60;    //only tick counter will be changed for different levels
@@ -53,7 +69,7 @@ void tmr(){
         default:
             break;
     }
-    tmr_preload(level);
+    tmr_preload();
 }
 void tmr_isr(){
     INTCONbits.TMR0IF = 0;
@@ -62,6 +78,16 @@ void tmr_isr(){
     }
     else{   
         tmr_preload();
+    }
+}
+void start_input_task() {
+    if (PORTCbits.RC0){
+        inp_port_btn_st = 1;
+    }
+    else if (inp_port_btn_st == 1) {
+        // A high pulse has been observed on the PORT input
+        inp_port_btn_st = 0;
+        game_start_flag = 1; //RC0 is pressed, we start the game.
     }
 }
 unsigned char sendSevenSegment(unsigned char x)
@@ -83,7 +109,7 @@ unsigned char sendSevenSegment(unsigned char x)
     return 0;   
 }
 void sevenSegmentUpdate(){
-    int digit=1;
+    uint8_t digit=1;
     for(i=0;i<4;i++){ 
 
         PORTH |= digit&0b00001111; //select only D0 by using PORTH
@@ -100,11 +126,40 @@ void clearSevenSegment(){
     for(i=0;i<4;i++)
         _7seg[i]='-';//set all segments to dash
 }
+void timer_task() {
+    switch (tmr_state) {
+        case TMR_IDLE:
+            if (tmr_startreq) {
+                // If a start request has been issued, go to the RUN state
+                tmr_startreq = 0;
+                tmr_preload();
+                INTCONbits.T0IF = 0;
+                T0CON |= 0x80; // Set TMR0ON
+                tmr_state = TMR_RUN;
+            }
+            break;
+        case TMR_RUN:
+            // Timer remains in the RUN state until the counter reaches its max
+            // "ticks" number of times.
+            break;
+        case TMR_DONE:
+            // State waits here until tmr_start() or tmr_abort() is called
+            break;
+    }
+}
 void main(void) {
     init_ports();
     tmr(); //level is always 1 here
     init_irq();
-    while(1){
+    while(1){ //rc0 check
+        start_input_task(); //checks rc0 repeatedly
+        if(game_start_flag){ //if rc0 is pressed and released, go to main loop
+            TRISC = 0xe0; //PORTC leds are set as output to use in game
+            break; //TODO: we may set timer flag here since game will be started immediately...
+        }
+    }
+    while(1){ //main loop
+        timer_task();
         trial++;
     }
 }
