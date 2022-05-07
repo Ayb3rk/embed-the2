@@ -8,6 +8,14 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+typedef struct {char loByte, hiByte;} byte_count;
+union  {
+    byte_count bytes;
+    uint16_t word;
+}timer_count ;
+int generation_note;
+uint16_t test;
+uint16_t current_tmr1_cnt;
 uint8_t level;
 uint8_t tick_counter; //counter at 100 gives 500ms, 80 gives 400ms, 60 gives 300ms
 uint8_t timer_done = 0;
@@ -147,6 +155,36 @@ void timer_task() {
             break;
     }
 }
+void timer1_task() {      // Save the Timer 1 value to generate random notes.
+    timer_count.bytes.loByte = TMR1L;
+    timer_count.bytes.hiByte = TMR1H;
+    current_tmr1_cnt = timer_count.word;
+}
+void generate_node_task() { // Generates random notes. It will be called every timer0 interrupt.
+    test = current_tmr1_cnt & 0b0000000000000111;
+    generation_note = test % 5;
+    uint16_t temp;
+    switch (level) {
+        case 1:
+            temp = current_tmr1_cnt;
+            temp = temp << 15;
+            current_tmr1_cnt = current_tmr1_cnt >> 1;
+            current_tmr1_cnt |= temp; 
+            break;
+        case 2:
+            temp = current_tmr1_cnt;
+            temp << 13;
+            current_tmr1_cnt >> 3;
+            current_tmr1_cnt |= temp; 
+            break;
+        case 3:
+            temp = current_tmr1_cnt;
+            temp << 11;
+            current_tmr1_cnt >> 5;
+            current_tmr1_cnt |= temp; 
+            break;
+    }
+}
 void main(void) {
     init_ports();
     tmr(); //level is always 1 here
@@ -155,6 +193,7 @@ void main(void) {
         start_input_task(); //checks rc0 repeatedly
         if(game_start_flag){ //if rc0 is pressed and released, go to main loop
             TRISC = 0xe0; //PORTC leds are set as output to use in game
+            timer1_task();
             break; //TODO: we may set timer flag here since game will be started immediately...
         }
     }
