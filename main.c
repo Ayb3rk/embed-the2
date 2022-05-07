@@ -28,6 +28,7 @@ void tmr_isr();
 typedef enum {TMR_IDLE, TMR_RUN, TMR_DONE} tmr_state_t;
 tmr_state_t tmr_state = TMR_IDLE;   // Current timer state
 uint8_t tmr_startreq = 0;           // Flag to request the timer to start
+uint8_t health_point;
 
 void __interrupt(high_priority) highPriorityISR(void) {
     if (INTCONbits.TMR0IF) tmr_isr();
@@ -36,6 +37,9 @@ void __interrupt(low_priority) lowPriorityISR(void) {}
 
 void init_ports(){
     level = 1; //initial level is 1
+    health_point = 9; //initial health point is 9
+    _7seg[0]=level; //initial seven segment display for level 
+    _7seg[3]=health_point; //initial seven segment display for health point
     TRISA = 0xe0; //led 0 to led 4 used for note visualization
     TRISB = 0xe0; //led 0 to led 4 used for note visualization
     TRISC = 0x01; //RC0 will be game starter port, thus we will set it as input in the beginning
@@ -198,6 +202,7 @@ void main(void) {
         }
     }
     while(1){ //main loop
+        sevenSegmentUpdate() // to avoid flickerring
         timer_task();
         trial++;
     }
