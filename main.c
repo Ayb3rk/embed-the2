@@ -20,8 +20,12 @@ uint8_t level;
 uint8_t tick_counter; //counter at 100 gives 500ms, 80 gives 400ms, 60 gives 300ms
 uint8_t timer_done = 0;
 uint8_t trial = 0;
+uint8_t is_lose = 0;
+uint8_t is_end = 0;
 uint8_t inp_port_btn_st = 0;
 uint8_t game_start_flag = 0;
+uint8_t note_count = 0;
+uint8_t shift_count;
 unsigned char _7seg[4];
 uint8_t i=0;
 void tmr_isr();
@@ -36,10 +40,13 @@ void __interrupt(high_priority) highPriorityISR(void) {
 void __interrupt(low_priority) lowPriorityISR(void) {}
 
 void init_ports(){
+    shift_count = 11;
     level = 1; //initial level is 1
     health_point = 9; //initial health point is 9
     _7seg[0]=level; //initial seven segment display for level 
     _7seg[3]=health_point; //initial seven segment display for health point
+    ADCON0bits.ADON = 0;
+    ADCON1 = 0x0f;
     TRISA = 0xe0; //led 0 to led 4 used for note visualization
     TRISB = 0xe0; //led 0 to led 4 used for note visualization
     TRISC = 0x01; //RC0 will be game starter port, thus we will set it as input in the beginning
@@ -87,7 +94,8 @@ void tmr(){
 void tmr_isr(){
     INTCONbits.TMR0IF = 0;
     if(--tick_counter == 0){
-        timer_done = 1; //delay achived
+        T0CONbits.TMR0ON = 0; // close timer
+        tmr_state = TMR_DONE; //delay achived
     }
     else{   
         tmr_preload();
@@ -118,10 +126,6 @@ unsigned char sendSevenSegment(unsigned char x)
         case 8: return 0b01111111;  // number 8
         case 9: return 0b01101111;  // number 9
         case '-': return 1<<6;      // dash (J6-g)
-        case 'l': return 0b00001110;
-        case 'o': return 0b01111110;
-        case 's': return 0b01011011;
-        case 'e': return 0b01001111;    
     }
     return 0;   
 }
@@ -143,19 +147,13 @@ void clearSevenSegment(){
     for(i=0;i<4;i++)
         _7seg[i]='-';//set all segments to dash
 }
-void loseSevenSegment(){
-    _7seg[0]='l';
-    _7seg[1]='o';
-    _7seg[2]='s';
-    _7seg[3]='e';
-}
 void timer_task() {
     switch (tmr_state) {
         case TMR_IDLE:
             if (tmr_startreq) {
                 // If a start request has been issued, go to the RUN state
                 tmr_startreq = 0;
-                tmr_preload();
+                tmr(); //set timer ticks for this level
                 INTCONbits.T0IF = 0;
                 T0CON |= 0xc0; // Set TMR0ON
                 tmr_state = TMR_RUN;
@@ -175,7 +173,7 @@ void timer1_task() {      // Save the Timer 1 value to generate random notes.
     timer_count.bytes.hiByte = TMR1H;
     current_tmr1_cnt = timer_count.word;
 }
-void generate_node_task() { // Generates random notes. It will be called every timer0 interrupt.
+void generate_note_task() { // Generates random notes. It will be called every timer0 interrupt.
     test = current_tmr1_cnt & 0b0000000000000111;
     generation_note = test % 5;
     uint16_t temp;
@@ -200,32 +198,62 @@ void generate_node_task() { // Generates random notes. It will be called every t
             break;
     }
 }
-void input_task() {      // User pushes the button.
-    if (PORTGbits.RG0 && PORTFbits.RF0){
-        PORTFbits.RF0 = 0;   //turn off the lamb.
+void note_shift(){
+    if(LATF > 0){ //if there is a unmatch note in latf, lose health point
+        health_point--;
+        if(health_point == 0){
+            is_lose = 1;
+        }
     }
-    else if (PORTGbits.RG1 && PORTFbits.RF1){
-        PORTFbits.RF1 = 0;   //turn off the lamb.
+    LATF = LATE;
+    LATE = LATD;
+    LATD = LATC;
+    LATC = LATB;
+    LATB = LATA;
+    LATA = 0x00;
+}
+void led_task(){
+    if(tmr_state == TMR_DONE){ //if timer is done, generate a note
+        note_shift(); 
+        shift_count--;
+        if(note_count < (level*5)){ //check generated note count
+            note_count++;
+            
+            generate_note_task(); //generation_note holds port number after this instruction
+            switch(generation_note){
+                case 0:
+                    LATA = 0b00000001;
+                    break;
+                case 1:
+                    LATA = 0b00000010;
+                    break;
+                case 2:
+                    LATA = 0b00000100;
+                    break;
+                case 3:
+                    LATA = 0b00001000;
+                    break;
+                case 4:
+                    LATA = 0b00010000;
+                    break;
+            }
+        }
+        else{ //level is finished
+            if(shift_count == 0){
+                level++;
+                if(level < 4){
+                    shift_count = level*5 + 6; //reset the shift count
+                    note_count = 0;
+                }
+                else{
+                    is_end = 1;
+                }
+            }
+            
+        }
+        tmr_state = TMR_IDLE;
+        tmr_startreq = 1;
     }
-    else if (PORTGbits.RG2 && PORTFbits.RF2){
-        PORTFbits.RF2 = 0;   //turn off the lamb.
-    }
-    else if (PORTGbits.RG3 && PORTFbits.RF3){
-        PORTFbits.RF3 = 0;   //turn off the lamb.
-    }
-    else if (PORTGbits.RG4 && PORTFbits.RF4){
-        PORTFbits.RF4 = 0;   //turn off the lamb.
-    }
-    else if (PORTGbits.RG0 || PORTGbits.RG1 || PORTGbits.RG2 || PORTGbits.RG3 || PORTGbits.RG4) {
-        --health_point; //Wrong button pressed.
-    }
-    else;
-    
-    if(!health_point){
-        loseSevenSegment();
-        sevenSegmentUpdate(); ////LOSE is visible in seven segment display 
-        game_start_flag = 0;    //and game shoul be ended.
-    }   
 }
 void main(void) {
     init_ports();
@@ -242,10 +270,8 @@ void main(void) {
     }
     while(1){ //main loop
         sevenSegmentUpdate(); // to avoid flickerring
+        led_task();
         timer_task();
-        input_task();
-        if(!game_start_flag)    break;    //lose situation. Game ends.
-        trial++;
     }
 }
 
