@@ -118,6 +118,10 @@ unsigned char sendSevenSegment(unsigned char x)
         case 8: return 0b01111111;  // number 8
         case 9: return 0b01101111;  // number 9
         case '-': return 1<<6;      // dash (J6-g)
+        case 'l': return 0b00001110;
+        case 'o': return 0b01111110;
+        case 's': return 0b01011011;
+        case 'e': return 0b01001111;    
     }
     return 0;   
 }
@@ -138,6 +142,12 @@ void clearSevenSegment(){
 
     for(i=0;i<4;i++)
         _7seg[i]='-';//set all segments to dash
+}
+void loseSevenSegment(){
+    _7seg[0]='l';
+    _7seg[1]='o';
+    _7seg[2]='s';
+    _7seg[3]='e';
 }
 void timer_task() {
     switch (tmr_state) {
@@ -190,6 +200,33 @@ void generate_node_task() { // Generates random notes. It will be called every t
             break;
     }
 }
+void input_task() {      // User pushes the button.
+    if (PORTGbits.RG0 && PORTFbits.RF0){
+        PORTFbits.RF0 = 0;   //turn off the lamb.
+    }
+    else if (PORTGbits.RG1 && PORTFbits.RF1){
+        PORTFbits.RF1 = 0;   //turn off the lamb.
+    }
+    else if (PORTGbits.RG2 && PORTFbits.RF2){
+        PORTFbits.RF2 = 0;   //turn off the lamb.
+    }
+    else if (PORTGbits.RG3 && PORTFbits.RF3){
+        PORTFbits.RF3 = 0;   //turn off the lamb.
+    }
+    else if (PORTGbits.RG4 && PORTFbits.RF4){
+        PORTFbits.RF4 = 0;   //turn off the lamb.
+    }
+    else if (PORTGbits.RG0 || PORTGbits.RG1 || PORTGbits.RG2 || PORTGbits.RG3 || PORTGbits.RG4) {
+        --health_point; //Wrong button pressed.
+    }
+    else;
+    
+    if(!health_point){
+        loseSevenSegment();
+        sevenSegmentUpdate(); ////LOSE is visible in seven segment display 
+        game_start_flag = 0;    //and game shoul be ended.
+    }   
+}
 void main(void) {
     init_ports();
     tmr(); //level is always 1 here
@@ -199,12 +236,15 @@ void main(void) {
         if(game_start_flag){ //if rc0 is pressed and released, go to main loop
             TRISC = 0xe0; //PORTC leds are set as output to use in game
             timer1_task();
+            tmr_startreq = 1;
             break; //TODO: we may set timer flag here since game will be started immediately...
         }
     }
     while(1){ //main loop
         sevenSegmentUpdate(); // to avoid flickerring
         timer_task();
+        input_task();
+        if(!game_start_flag)    break;    //lose situation. Game ends.
         trial++;
     }
 }
