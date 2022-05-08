@@ -265,7 +265,7 @@ void main(void) {
             TRISC = 0xe0; //PORTC leds are set as output to use in game
             timer1_task();
             tmr_startreq = 1;
-            break; //TODO: we may set timer flag here since game will be started immediately...
+            break;
         }
     }
     while(1){ //main loop
