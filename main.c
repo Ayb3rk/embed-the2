@@ -147,7 +147,7 @@ void timer_task() {
                 tmr_startreq = 0;
                 tmr_preload();
                 INTCONbits.T0IF = 0;
-                T0CON |= 0x80; // Set TMR0ON
+                T0CON |= 0xc0; // Set TMR0ON
                 tmr_state = TMR_RUN;
             }
             break;
