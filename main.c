@@ -202,7 +202,7 @@ void main(void) {
         }
     }
     while(1){ //main loop
-        sevenSegmentUpdate() // to avoid flickerring
+        sevenSegmentUpdate(); // to avoid flickerring
         timer_task();
         trial++;
     }
