@@ -51,6 +51,7 @@ void init_ports(){
 void init_irq(){
     INTCONbits.TMR0IE = 1;
     INTCONbits.GIE = 1;
+    T1CON = 0b11111001;
 }
 void tmr_start(uint8_t ticks) {
     tick_counter = ticks; //set the desired number of ticks
