@@ -1,13 +1,12 @@
 /* 
  * File:   main.c
- * Author: ayber
+ * Author: ayberk
  *
  * Created on 03 May?s 2022 Sal?, 13:23
  */
+#pragma config OSC = HSPLL
 #include <xc.h>
 #include <stdint.h>
-#include <stdio.h>
-#include <stdlib.h>
 typedef struct {char loByte, hiByte;} byte_count;
 union  {
     byte_count bytes;
@@ -31,7 +30,7 @@ uint8_t portg_1_inp = 0;
 uint8_t portg_2_inp = 0;
 uint8_t portg_3_inp = 0;
 uint8_t portg_4_inp = 0;
-unsigned char _7seg[4];
+uint8_t _7seg[4];
 uint8_t i=0;
 void tmr_isr();
 typedef enum {TMR_IDLE, TMR_RUN, TMR_DONE} tmr_state_t;
@@ -46,10 +45,9 @@ void __interrupt(low_priority) lowPriorityISR(void) {}
 
 void init_ports(){
     shift_count = 11;
+    note_count = 0;
     level = 1; //initial level is 1
     health_point = 9; //initial health point is 9
-    _7seg[0]=level; //initial seven segment display for level 
-    _7seg[3]=health_point; //initial seven segment display for health point
     ADCON0bits.ADON = 0;
     ADCON1 = 0x0f;
     TRISA = 0xe0; //led 0 to led 4 used for note visualization
@@ -59,11 +57,19 @@ void init_ports(){
     TRISE = 0xe0; //led 0 to led 4 used for note visualization
     TRISF = 0xe0; //led 0 to led 4 used for note visualization
     TRISG = 0b011111; //PORTG 0-4 is input for matching notes
+    TRISH = 0x00;
+    TRISJ = 0x00;
+    LATA = 0;
+    LATB = 0;
+    LATC = 0;
+    LATD = 0;
+    LATE = 0;
+    LATF = 0;
 }
 void init_irq(){
     INTCONbits.TMR0IE = 1;
     INTCONbits.GIE = 1;
-    T1CON = 0b11111001;
+    T1CON = 0b10000101;
 }
 void tmr_start(uint8_t ticks) {
     tick_counter = ticks; //set the desired number of ticks
@@ -116,10 +122,17 @@ void start_input_task() {
         game_start_flag = 1; //RC0 is pressed, we start the game.
     }
 }
+void endSevenSegment(){
+    _7seg[0]=13;
+    _7seg[1]=14;
+    _7seg[2]=15;
+    _7seg[3] = -1;
+}
 unsigned char sendSevenSegment(unsigned char x)
 {
     switch(x)
     {
+        case -1: return 0x00;
         case 0: return 0b00111111;  // number 0
         case 1: return 0b00000110;  // number 1
         case 2: return 0b01011011;  // number 2
@@ -130,40 +143,31 @@ unsigned char sendSevenSegment(unsigned char x)
         case 7: return 0b00000111;  // number 7
         case 8: return 0b01111111;  // number 8
         case 9: return 0b01101111;  // number 9
-        case '-': return 1<<6;      // dash (J6-g)
-        case 'l': return 0b00001110;
-        case 'o': return 0b01111110;
-        case 's': return 0b01011011;
-        case 'e': return 0b01001111; 
-        case 'n': return 0b01010100;
-        case 'd': return 0b01011110;
+        case 10: return 0b00111000; //L
+        case 11: return 0b00111111; //O
+        case 12: return 0b01101101; //S
+        case 13: return 0b01111001; //E
+        case 14: return 0b01010100; //n
+        case 15: return 0b01011110; //d
     }
     return 0;   
 }
-void sevenSegmentUpdate(){
-    uint8_t digit=1;
+void sevenSegmentDisplay(){
+    uint8_t digit=0b00000001;
     for(i=0;i<4;i++){ 
-
-        PORTH |= digit&0b00001111; //select only D0 by using PORTH
-        PORTJ=sendSevenSegment(_7seg[3-i]); //write the byte necessary to turn on segments to PORTJ
-        //wait for a while , ne kadar bekleyecegimizi belirtmemis ??
-        PORTH &= 0b11110000; //clear
+        PORTH = digit; //select only D0 by using PORTH
+        PORTJ=sendSevenSegment(_7seg[i]); //write the byte necessary to turn on segments to PORTJ
+        //wait for a while 
+        _delay(10000);
+        PORTH = 0; //clear
         digit<<=1; // do the same for D1, D2 and D3
-
-
     }
 }
-void endSevenSegment(){
-    _7seg[0]='e';
-    _7seg[1]='n';
-    _7seg[2]='d';
-}
-    
 void loseSevenSegment(){
-    _7seg[0]='l';
-    _7seg[1]='o';
-    _7seg[2]='s';
-    _7seg[3]='e';
+    _7seg[0]=10;
+    _7seg[1]=11;
+    _7seg[2]=12;
+    _7seg[3]=13;
 }
 void input_task() {      // User pushes the button.
     if (PORTGbits.RG0){
@@ -229,17 +233,12 @@ void input_task() {      // User pushes the button.
         portg_4_inp = 0;
         health_point--;
     }
-
+    _7seg[0] = health_point;
     if(health_point == 0){ //lose condition
         is_lose = 1;
     }
 }
 
-void clearSevenSegment(){
-
-    for(i=0;i<4;i++)
-        _7seg[i]='-';//set all segments to dash
-}
 void timer_task() {
     switch (tmr_state) {
         case TMR_IDLE:
@@ -279,14 +278,14 @@ void generate_note_task() { // Generates random notes. It will be called every t
             break;
         case 2:
             temp = current_tmr1_cnt;
-            temp << 13;
-            current_tmr1_cnt >> 3;
+            temp <<= 13;
+            current_tmr1_cnt >>= 3;
             current_tmr1_cnt |= temp; 
             break;
         case 3:
             temp = current_tmr1_cnt;
-            temp << 11;
-            current_tmr1_cnt >> 5;
+            temp <<= 11;
+            current_tmr1_cnt >>= 5;
             current_tmr1_cnt |= temp; 
             break;
     }
@@ -294,6 +293,7 @@ void generate_note_task() { // Generates random notes. It will be called every t
 void note_shift(){
     if(LATF > 0){ //if there is a unmatch note in latf, lose health point
         health_point--;
+        _7seg[0] = health_point;
         if(health_point == 0){ //lose condition
             is_lose = 1;
         }
@@ -334,6 +334,7 @@ void led_task(){
         else{ //level is finished
             if(shift_count == 0){
                 level++;
+                _7seg[3] = level;
                 if(level < 4){
                     shift_count = level*5 + 6; //reset the shift count
                     note_count = 0;
@@ -349,23 +350,51 @@ void led_task(){
     }
 }
 void main(void) {
-    init_ports();
-    tmr(); //level is always 1 here
-    init_irq();
-    while(1){ //rc0 check
-        start_input_task(); //checks rc0 repeatedly
-        if(game_start_flag){ //if rc0 is pressed and released, go to main loop
-            TRISC = 0xe0; //PORTC leds are set as output to use in game
-            timer1_task();
-            tmr_startreq = 1;
-            break;
+    mmain:
+        init_ports();
+        tmr(); //level is always 1 here
+        init_irq();
+        while(1){ //rc0 check
+            TRISC = 0x01;
+            if(!is_end && !is_lose){
+                _7seg[0]=health_point; //initial seven segment display for level
+                _7seg[1] = -1;
+                _7seg[2] = -1;
+                _7seg[3]=level; //initial seven segment display for health point
+            }
+            if(is_end){
+                endSevenSegment();
+            }
+            if(is_lose){
+                loseSevenSegment();
+            }
+            sevenSegmentDisplay(); // to avoid flickerring
+            start_input_task(); //checks rc0 repeatedly
+            if(game_start_flag){ //if rc0 is pressed and released, go to main loop
+                is_lose = 0;
+                is_end = 0;
+                game_start_flag = 0;
+                TRISC = 0x00; //PORTC leds are set as output to use in game
+                timer1_task();
+                tmr_startreq = 1;
+                _7seg[0]=health_point; //initial seven segment display for level
+                _7seg[1] = -1;
+                _7seg[2] = -1;
+                _7seg[3]=level; //initial seven segment display for health point
+                break;
+            }
         }
-    }
-    while(1){ //main loop
-        sevenSegmentUpdate(); // to avoid flickerring
-        input_task();
-        led_task();
-        timer_task();
-    }
+        while(1){ //main loop
+            sevenSegmentDisplay(); // to avoid flickerring
+            input_task();
+            led_task();
+            if(is_lose){
+                goto mmain;
+            }
+            if(is_end){
+                goto mmain;
+            }
+            timer_task();
+        }
 }
 
