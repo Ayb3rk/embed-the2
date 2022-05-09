@@ -135,6 +135,8 @@ unsigned char sendSevenSegment(unsigned char x)
         case 'o': return 0b01111110;
         case 's': return 0b01011011;
         case 'e': return 0b01001111; 
+        case 'n': return 0b01010100;
+        case 'd': return 0b01011110;
     }
     return 0;   
 }
@@ -151,6 +153,12 @@ void sevenSegmentUpdate(){
 
     }
 }
+void endSevenSegment(){
+    _7seg[0]='e';
+    _7seg[1]='n';
+    _7seg[2]='d';
+}
+    
 void loseSevenSegment(){
     _7seg[0]='l';
     _7seg[1]='o';
