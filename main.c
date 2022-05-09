@@ -1,8 +1,9 @@
 /* 
- * File:   main.c
- * Author: ayberk
+ * Authors: Ayberk Gokmen - 2380442
+ *          Muhammed Tayyip Öztürk - 2380806
+ *          Nilufer Tak - 2310506
+ *          Muhammed Yakup Demirtas - 2380285
  *
- * Created on 03 May?s 2022 Sal?, 13:23
  */
 #pragma config OSC = HSPLL
 #include <xc.h>
@@ -25,12 +26,13 @@ uint8_t inp_port_btn_st = 0;
 uint8_t game_start_flag = 0;
 uint8_t note_count = 0;
 uint8_t shift_count;
-uint8_t portg_0_inp = 0;
+uint8_t portg_0_inp = 0; //portg press testing
 uint8_t portg_1_inp = 0;
 uint8_t portg_2_inp = 0;
 uint8_t portg_3_inp = 0;
 uint8_t portg_4_inp = 0;
-uint8_t _7seg[4];
+uint8_t first_game = 1;
+uint8_t _7seg[4]; //array for seven segment display
 uint8_t i=0;
 void tmr_isr();
 typedef enum {TMR_IDLE, TMR_RUN, TMR_DONE} tmr_state_t;
@@ -48,7 +50,7 @@ void init_ports(){
     note_count = 0;
     level = 1; //initial level is 1
     health_point = 9; //initial health point is 9
-    ADCON0bits.ADON = 0;
+    ADCON0bits.ADON = 0; //disable ad conv
     ADCON1 = 0x0f;
     TRISA = 0xe0; //led 0 to led 4 used for note visualization
     TRISB = 0xe0; //led 0 to led 4 used for note visualization
@@ -65,11 +67,16 @@ void init_ports(){
     LATD = 0;
     LATE = 0;
     LATF = 0;
+    portg_0_inp = 0; //portg press testing
+    portg_1_inp = 0;
+    portg_2_inp = 0;
+    portg_3_inp = 0;
+    portg_4_inp = 0;
 }
 void init_irq(){
     INTCONbits.TMR0IE = 1;
     INTCONbits.GIE = 1;
-    T1CON = 0b10000101;
+    T1CON = 0b10000101; //enable timer1
 }
 void tmr_start(uint8_t ticks) {
     tick_counter = ticks; //set the desired number of ticks
@@ -190,7 +197,7 @@ void input_task() {      // User pushes the button.
         portg_1_inp = 0;
         PORTFbits.RF1 = 0;
     }
-    else if(portg_1_inp){
+    else if(portg_1_inp){ //unmatched press
         portg_1_inp = 0;
         health_point--;
     }
@@ -203,8 +210,8 @@ void input_task() {      // User pushes the button.
         portg_2_inp = 0;
         PORTFbits.RF2 = 0;
     }
-    else if(portg_2_inp){
-        portg_2_inp = 0;
+    else if(portg_2_inp){ //unmatched press
+        portg_2_inp = 0; 
         health_point--;
     }
     
@@ -216,7 +223,7 @@ void input_task() {      // User pushes the button.
         portg_3_inp = 0;
         PORTFbits.RF3 = 0;
     }
-    else if(portg_3_inp){
+    else if(portg_3_inp){ //unmatched press
         portg_3_inp = 0;
         health_point--;
     }
@@ -229,12 +236,12 @@ void input_task() {      // User pushes the button.
         portg_4_inp = 0;
         PORTFbits.RF4 = 0;
     }
-    else if(portg_4_inp){
+    else if(portg_4_inp){ //unmatched press
         portg_4_inp = 0;
         health_point--;
     }
-    _7seg[0] = health_point;
-    if(health_point == 0){ //lose condition
+    _7seg[0] = health_point; //update health point
+    if(health_point <= 0){ //lose condition
         is_lose = 1;
     }
 }
@@ -355,8 +362,7 @@ void main(void) {
         tmr(); //level is always 1 here
         init_irq();
         while(1){ //rc0 check
-            TRISC = 0x01;
-            if(!is_end && !is_lose){
+            if(!is_end && !is_lose && first_game){
                 _7seg[0]=health_point; //initial seven segment display for level
                 _7seg[1] = -1;
                 _7seg[2] = -1;
@@ -364,13 +370,16 @@ void main(void) {
             }
             if(is_end){
                 endSevenSegment();
+                is_end = 0;
             }
             if(is_lose){
                 loseSevenSegment();
+                is_lose = 0;
             }
             sevenSegmentDisplay(); // to avoid flickerring
             start_input_task(); //checks rc0 repeatedly
             if(game_start_flag){ //if rc0 is pressed and released, go to main loop
+                first_game = 0;
                 is_lose = 0;
                 is_end = 0;
                 game_start_flag = 0;
@@ -381,6 +390,7 @@ void main(void) {
                 _7seg[1] = -1;
                 _7seg[2] = -1;
                 _7seg[3]=level; //initial seven segment display for health point
+                tmr_state = TMR_IDLE;
                 break;
             }
         }
