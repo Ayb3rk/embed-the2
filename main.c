@@ -26,6 +26,11 @@ uint8_t inp_port_btn_st = 0;
 uint8_t game_start_flag = 0;
 uint8_t note_count = 0;
 uint8_t shift_count;
+uint8_t portg_0_inp = 0;
+uint8_t portg_1_inp = 0;
+uint8_t portg_2_inp = 0;
+uint8_t portg_3_inp = 0;
+uint8_t portg_4_inp = 0;
 unsigned char _7seg[4];
 uint8_t i=0;
 void tmr_isr();
@@ -53,7 +58,7 @@ void init_ports(){
     TRISD = 0xe0; //led 0 to led 4 used for note visualization
     TRISE = 0xe0; //led 0 to led 4 used for note visualization
     TRISF = 0xe0; //led 0 to led 4 used for note visualization
-    TRISG = 0x1f; //PORTG 0-4 is input for matching notes
+    TRISG = 0b011111; //PORTG 0-4 is input for matching notes
 }
 void init_irq(){
     INTCONbits.TMR0IE = 1;
@@ -126,6 +131,10 @@ unsigned char sendSevenSegment(unsigned char x)
         case 8: return 0b01111111;  // number 8
         case 9: return 0b01101111;  // number 9
         case '-': return 1<<6;      // dash (J6-g)
+        case 'l': return 0b00001110;
+        case 'o': return 0b01111110;
+        case 's': return 0b01011011;
+        case 'e': return 0b01001111; 
     }
     return 0;   
 }
@@ -142,6 +151,82 @@ void sevenSegmentUpdate(){
 
     }
 }
+void loseSevenSegment(){
+    _7seg[0]='l';
+    _7seg[1]='o';
+    _7seg[2]='s';
+    _7seg[3]='e';
+}
+void input_task() {      // User pushes the button.
+    if (PORTGbits.RG0){
+        portg_0_inp = 1;   //set the flag when pressing
+    }
+    else if(portg_0_inp  && PORTFbits.RF0){ //check if led is open, when releasing the button
+        portg_0_inp = 0;
+        PORTFbits.RF0 = 0;
+    }
+    else if(portg_0_inp){
+        portg_0_inp = 0;
+        health_point--;
+    }
+    
+    
+    if (PORTGbits.RG1){
+        portg_1_inp = 1;   //set the flag when pressing
+    }
+    else if(portg_1_inp  && PORTFbits.RF1){ //check if led is open, when releasing the button
+        portg_1_inp = 0;
+        PORTFbits.RF1 = 0;
+    }
+    else if(portg_1_inp){
+        portg_1_inp = 0;
+        health_point--;
+    }
+    
+    
+    if (PORTGbits.RG2){
+        portg_2_inp = 1;   //set the flag when pressing
+    }
+    else if(portg_2_inp  && PORTFbits.RF2){ //check if led is open, when releasing the button
+        portg_2_inp = 0;
+        PORTFbits.RF2 = 0;
+    }
+    else if(portg_2_inp){
+        portg_2_inp = 0;
+        health_point--;
+    }
+    
+    
+    if (PORTGbits.RG3){
+        portg_3_inp = 1;   //set the flag when pressing
+    }
+    else if(portg_3_inp  && PORTFbits.RF3){ //check if led is open, when releasing the button
+        portg_3_inp = 0;
+        PORTFbits.RF3 = 0;
+    }
+    else if(portg_3_inp){
+        portg_3_inp = 0;
+        health_point--;
+    }
+    
+    
+    if (PORTGbits.RG4){
+        portg_4_inp = 1;   //set the flag when pressing
+    }
+    else if(portg_4_inp  && PORTFbits.RF4){ //check if led is open, when releasing the button
+        portg_4_inp = 0;
+        PORTFbits.RF4 = 0;
+    }
+    else if(portg_4_inp){
+        portg_4_inp = 0;
+        health_point--;
+    }
+
+    if(health_point == 0){ //lose condition
+        is_lose = 1;
+    }
+}
+
 void clearSevenSegment(){
 
     for(i=0;i<4;i++)
@@ -201,7 +286,7 @@ void generate_note_task() { // Generates random notes. It will be called every t
 void note_shift(){
     if(LATF > 0){ //if there is a unmatch note in latf, lose health point
         health_point--;
-        if(health_point == 0){
+        if(health_point == 0){ //lose condition
             is_lose = 1;
         }
     }
@@ -270,6 +355,7 @@ void main(void) {
     }
     while(1){ //main loop
         sevenSegmentUpdate(); // to avoid flickerring
+        input_task();
         led_task();
         timer_task();
     }
